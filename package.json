@@ -1,0 +1,41 @@
+{
+  "name": "bybit-market-option-bot",
+  "version": "1.0.0",
+  "description": "A Telegram bot for monitoring ByBit market options conditions and detecting trading opportunities",
+  "type": "module",
+  "main": "dist/bot.js",
+  "scripts": {
+    "dev": "pnpm run typecheck && pnpm run start",
+    "typecheck": "tsc --noEmit",
+    "preview": "node dist/bot.js",
+    "start": "node --trace-uncaught --enable-source-maps --loader ts-node/esm src/bot/index.ts",
+    "build": "node build.js",
+    "build:prod": "NODE_ENV=production node build.js"
+  },
+  "keywords": [
+    "bybit",
+    "trading",
+    "options",
+    "bot",
+    "telegram",
+    "crypto"
+  ],
+  "author": "Qlipoth",
+  "license": "ISC",
+  "dependencies": {
+    "bybit-api": "^4.4.2",
+    "dotenv": "^17.2.3",
+    "grammy": "^1.38.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/prettier": "^3.0.0",
+    "esbuild": "0.27.1",
+    "prettier": "^3.7.4",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
