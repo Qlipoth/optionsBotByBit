@@ -1,4 +1,5 @@
 import { scanOptions } from './scanner.js';
+import { formatSpreadMessage } from '../utils.js';
 import type { BaseCoin } from '../types.js';
 
 type MessageCallback = (msg: string) => Promise<void>;
@@ -19,28 +20,16 @@ export async function initializeOptionsWatcher(
         // пока ограничимся ETH
         const spreads = await scanOptions(symbol);
 
-        for (const spread of spreads) {
-          const msg = `
-🟢 *${spread.baseCoin} OPTIONS*
-Expiry: ${spread.expiry}
-
-Bull Call Spread
-${spread.buyStrike}C / ${spread.sellStrike}C
-
-Cost: $${spread.cost.toFixed(2)}
-Max Profit: $${spread.maxProfit.toFixed(2)}
-RR: ${spread.rr.toFixed(2)}
-Delta: ${spread.delta.toFixed(2)}
-`;
-
+        if (spreads.length > 0) {
+          const msg = formatSpreadMessage(spreads);
           await onMessage(msg);
         }
       } catch (e) {
         console.error('[OptionsWatcher] Scan error:', e);
       }
     },
-    1 * 60 * 1000
-  ); // раз в 10 минут
+    10 * 60 * 1000 // 10 minutes
+  );
 
   // 👇 ВАЖНО: возвращаем stop-функцию
   return () => {

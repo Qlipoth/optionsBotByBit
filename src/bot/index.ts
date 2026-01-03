@@ -6,6 +6,8 @@ import * as dotenv from 'dotenv';
 import { Bot, Keyboard } from 'grammy';
 import { getBybitClient, initBybitClient } from '../services/bybit.js';
 import { initializeOptionsWatcher } from '../options/watcher.js';
+import { scanOptions } from '../options/scanner.js';
+import { formatSpreadMessage } from '../utils.js';
 
 type Config = {
   BOT_TOKEN: string;
@@ -38,8 +40,8 @@ const config = loadConfig();
 initBybitClient({
   apiKey: config.BYBIT_API_KEY,
   apiSecret: config.BYBIT_SECRET_KEY,
-  demoTrading: true,
-  testnet: false, // Set to true for testnet
+  demoTrading: false, // Switched to REAL market data for accurate scanning
+  testnet: false,
 });
 
 export const bybitClient = getBybitClient();
@@ -129,11 +131,10 @@ function registerShutdownHandlers() {
    =============================== */
 
 const mainKeyboard = new Keyboard()
-  .text('/start')
-  .text('/status')
+  .text('📊 Top Spreads')
   .row()
+  .text('/status')
   .text('/stop')
-  .text('/download_logs')
   .resized();
 
 /* ===============================
@@ -150,6 +151,22 @@ function registerCommands() {
       parse_mode: 'Markdown',
       reply_markup: mainKeyboard,
     });
+  });
+
+  bot.hears('📊 Top Spreads', async ctx => {
+    const statusMsg = await ctx.reply('🔍 Scanning ETH Options...');
+    try {
+      // Default to ETH for now
+      const spreads = await scanOptions('ETH');
+      const text = formatSpreadMessage(spreads);
+      
+      // Delete status message and send new one (or edit if short enough, but clean format is better)
+      await ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id);
+      await ctx.reply(text, { parse_mode: 'Markdown' });
+    } catch (error) {
+      console.error('Scan error:', error);
+      await ctx.api.editMessageText(ctx.chat.id, statusMsg.message_id, '❌ Error scanning options');
+    }
   });
 
   bot.command('stop', async ctx => {

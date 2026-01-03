@@ -1,36 +1,41 @@
-import { getOptionsInstruments, getOptionTicker } from '../services/bybit.js';
+import { getOptionsInstruments, getOptionTickers, getOptionsTakerFeeRate } from '../services/bybit.js';
 import { normalizeOption } from '../utils.js';
 import { buildBullCallSpreads } from '../strategies/bullCall.js';
 
 export async function scanOptions(baseCoin: 'BTC' | 'ETH') {
-  const instruments = await getOptionsInstruments();
-  console.log('instruments:', JSON.stringify(instruments));
+  // 1. Получаем список всех инструментов (метаданные)
+  const instruments = await getOptionsInstruments(baseCoin);
+  const optionsList = instruments.result.list;
+  // console.log(`🔍 Found ${optionsList.length} total option instruments for ${baseCoin}.`);
 
-  const options = instruments.result.list;
+  const sampleSymbol = optionsList?.[0]?.symbol;
+  const feeRate = await getOptionsTakerFeeRate(sampleSymbol);
 
-  console.log('options:', JSON.stringify(options));
+  // 2. Получаем рыночные данные (тикеры) для всех опционов сразу
+  const allTickers = await getOptionTickers(baseCoin);
+  // console.log(`📊 Fetched ${allTickers.length} tickers for ${baseCoin}.`);
 
-  const tickers = await Promise.all(options.map(o => getOptionTicker(o.symbol)));
+  // Создаем Map для быстрого поиска тикера по символу
+  const tickerMap = new Map(allTickers.map(t => [t.symbol, t]));
 
-  console.log('tickers:', JSON.stringify(tickers));
-
-  const filteredTickers = tickers?.filter(el => !!el);
-  if (!filteredTickers.length) {
-    return [];
-  }
-
-  const normalized = options
-    .map((opt, i) => normalizeOption(opt, filteredTickers[i]!))
+  // 3. Собираем нормализованные данные
+  const normalized = optionsList
+    .map(opt => {
+      const ticker = tickerMap.get(opt.symbol);
+      if (!ticker) {
+        return null;
+      }
+      return normalizeOption(opt, ticker);
+    })
     .filter(Boolean) as any[];
 
-  console.log('normalized:', JSON.stringify(normalized));
+  // console.log(`✅ Normalized ${normalized.length} valid options with market data.`);
 
-  const spreads = buildBullCallSpreads(normalized);
-
-  console.log('spreads:', JSON.stringify(spreads));
+  const spreads = buildBullCallSpreads(normalized, feeRate);
+  // console.log(`💡 Generated ${spreads.length} potential spreads before final filtering.`);
 
   return spreads
-    .filter(s => s.delta > 0.25)
+    .filter(s => s.delta > 0) // Just ensure it's bullish
     .sort((a, b) => b.rr - a.rr)
     .slice(0, 3);
 }

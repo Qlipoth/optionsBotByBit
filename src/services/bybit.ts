@@ -3,6 +3,8 @@ import type { TickerData } from '../types.js';
 import { parseOptionSymbol } from '../utils.js';
 
 let bybitClient: RestClientV5 | null = null;
+let cachedOptionsTakerFeeRate: number | null = null;
+let cachedOptionsTakerFeeRatePromise: Promise<number> | null = null;
 
 type InitBybitClientParams = {
   apiKey: string;
@@ -30,12 +32,54 @@ export function getBybitClient(): RestClientV5 {
   return bybitClient;
 }
 
+export async function getOptionsTakerFeeRate(sampleOptionSymbol?: string): Promise<number> {
+  if (cachedOptionsTakerFeeRate != null) return cachedOptionsTakerFeeRate;
+  if (cachedOptionsTakerFeeRatePromise) return cachedOptionsTakerFeeRatePromise;
+
+  cachedOptionsTakerFeeRatePromise = (async () => {
+    const fallback = Number(process.env.BYBIT_OPTIONS_FEE_RATE || process.env.BYBIT_TRADE_FEE_RATE || 0);
+    const client = getBybitClient();
+
+    if (!sampleOptionSymbol) {
+      cachedOptionsTakerFeeRate = fallback;
+      return cachedOptionsTakerFeeRate;
+    }
+
+    try {
+      const resp: any = await client.getFeeRate({
+        category: 'option',
+        symbol: sampleOptionSymbol,
+      });
+
+      const first = resp?.result?.list?.[0];
+      const taker = Number(first?.takerFeeRate);
+      cachedOptionsTakerFeeRate = Number.isFinite(taker) ? taker : fallback;
+      return cachedOptionsTakerFeeRate;
+    } catch {
+      cachedOptionsTakerFeeRate = fallback;
+      return cachedOptionsTakerFeeRate;
+    } finally {
+      cachedOptionsTakerFeeRatePromise = null;
+    }
+  })();
+
+  return cachedOptionsTakerFeeRatePromise;
+}
+
 // Получение списка опционов
-export async function getOptionsInstruments() {
+export async function getOptionsInstruments(baseCoin?: string) {
   const client = getBybitClient();
-  return client.getInstrumentsInfo({
+  const params: any = {
     category: 'option',
-  });
+    limit: 1000,
+    status: 'Trading',
+  };
+  
+  if (baseCoin) {
+    params.baseCoin = baseCoin;
+  }
+
+  return client.getInstrumentsInfo(params);
 }
 
 // Получение стакана цен для опциона
@@ -48,7 +92,32 @@ export async function getOptionOrderBook(symbol: string) {
   });
 }
 
-// Получение греков и волатильности
+// Получение греков и волатильности (mass fetch)
+export async function getOptionTickers(baseCoin: string): Promise<TickerData[]> {
+  const client = getBybitClient();
+  const result = await client.getTickers({
+    category: 'option',
+    baseCoin,
+  });
+
+  if (!result.result.list) return [];
+
+  return result.result.list.map(t => ({
+    symbol: t.symbol,
+    bid: t.bid1Price,
+    ask: t.ask1Price,
+    markPrice: t.markPrice,
+    iv: t.markIv,
+    delta: t.delta,
+    gamma: t.gamma,
+    vega: t.vega,
+    theta: t.theta,
+    openInterest: t.openInterest,
+    volume24h: t.volume24h,
+  }));
+}
+
+// Получение греков и волатильности (single - use sparingly)
 export async function getOptionTicker(symbol: string): Promise<TickerData | null> {
   const client = getBybitClient();
   const result = await client.getTickers({

@@ -46,7 +46,11 @@ export interface BullCallSpread {
   maxProfit: number;
   rr: number;
 
-  delta: number;
+  delta: number; // Net delta of the spread
+  probBuyITM: number;
+  probMaxProfit: number;
+  ev: number;
+
   iv: number;
 }
 
